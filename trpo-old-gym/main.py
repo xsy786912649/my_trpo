@@ -114,7 +114,7 @@ def update_params(batch):
     for i in range(1):
         advantages=update_advantage_function()
 
-    advantages = (advantages - advantages.mean()) / advantages.std()
+    advantages = (advantages - advantages.mean()) / (advantages.std() * 3.0)
 
     action_means, action_log_stds, action_stds = policy_net(Variable(states))
     fixed_log_prob = normal_log_density(Variable(actions), action_means, action_log_stds, action_stds).data.clone()
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _,_ = env.step(action)
+                next_state, reward, done, _ = env.step(action)
                 reward_sum += reward
 
                 next_state = running_state(next_state)
@@ -178,7 +178,7 @@ if __name__ == "__main__":
                     break
 
                 state = next_state
-            num_steps += (t-1)
+            num_steps += (t+1)
             num_episodes += 1
             reward_batch += reward_sum
 
