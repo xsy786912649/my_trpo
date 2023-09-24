@@ -154,7 +154,7 @@ if __name__ == "__main__":
         reward_batch = 0
         num_episodes = 0
         while num_steps < args.batch_size-1:
-            state = env.reset()[0]
+            state = env.reset()
             state = running_state(state)
 
             reward_sum = 0
