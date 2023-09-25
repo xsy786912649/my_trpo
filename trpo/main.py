@@ -163,15 +163,13 @@ if __name__ == "__main__":
                 next_state = running_state(next_state)
 
                 mask = 1
-                if done:
+                if t==args.max_length-1:
                     mask = 0
 
                 memory.push(state, np.array([action]), mask, next_state, reward)
 
                 if args.render:
                     env.render()
-                if done:
-                    break
 
                 state = next_state
             num_steps += (t+1)
