@@ -17,12 +17,12 @@ python main.py --env-name "Reacher-v4"
 
 ## Recommended hyper parameters
 
-InvertedPendulum-v1: 5000
+InvertedPendulum-v4
 
-Reacher-v1, InvertedDoublePendulum-v1: 15000
+Reacher-v4, InvertedDoublePendulum-v4
 
-HalfCheetah-v1, Hopper-v1, Swimmer-v1, Walker2d-v1: 25000
+HalfCheetah-v4, Hopper-v4, Swimmer-v4, Walker2d-v4
 
-Ant-v1, Humanoid-v1: 50000
+Ant-v4, Humanoid-v4
 
 
