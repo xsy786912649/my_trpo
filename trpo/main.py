@@ -32,8 +32,8 @@ parser.add_argument('--damping', type=float, default=0e-1, metavar='G',
                     help='damping (default: 0e-1)')
 parser.add_argument('--seed', type=int, default=543, metavar='N',
                     help='random seed (default: 1)')
-parser.add_argument('--batch-size', type=int, default=15000, metavar='N',
-                    help='batch-size (default: 15000)')
+parser.add_argument('--batch-size', type=int, default=15, metavar='N',
+                    help='batch-size (default: 15)')
 parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
@@ -59,11 +59,16 @@ def select_action(state):
     action = torch.normal(action_mean, action_std)
     return action
 
-def update_params(batch):
+def update_params(batch,batch_extra,batch_size):
     rewards = torch.Tensor(batch.reward)
-    masks = torch.Tensor(batch.mask)
+    path_numbers = torch.Tensor(batch.path_number)
     actions = torch.Tensor(np.concatenate(batch.action, 0))
     states = torch.Tensor(batch.state)
+
+    rewards_extra = torch.Tensor(batch_extra.reward)
+    path_numbers_extra = torch.Tensor(batch_extra.path_number)
+    actions_extra = torch.Tensor(np.concatenate(batch_extra.action, 0))
+    states_extra = torch.Tensor(batch_extra.state)
 
     def update_advantage_function(): 
         values = value_net(Variable(states))
@@ -71,16 +76,25 @@ def update_params(batch):
         deltas = torch.Tensor(actions.size(0),1)
         advantages = torch.Tensor(actions.size(0),1)
 
-        prev_return = 0
-        prev_value = 0
+        prev_return=torch.zeros(batch_size,1)
+        prev_value=torch.zeros(batch_size,1)
         prev_advantage = 0
-        for i in reversed(range(rewards.size(0))):
-            returns[i] = rewards[i] + args.gamma * prev_return * masks[i]
-            deltas[i] = rewards[i] + args.gamma * prev_value * masks[i] - values.data[i]
-            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage * masks[i]
 
-            prev_return = returns[i, 0]
-            prev_value = values.data[i, 0]
+        k=batch_size-1
+        for i in reversed(range(rewards_extra.size(0))):
+            if not int(path_numbers_extra[i].item())==k:
+                prev_value[k,0] = value_net(Variable(states_extra[i+1])).data[0]
+                k=k-1
+                assert k==path_numbers_extra[i].item()
+            prev_return[k,0]=rewards[i]+ args.gamma * prev_return[k,0] 
+        
+        for i in reversed(range(rewards.size(0))):
+            returns[i] = rewards[i] + args.gamma * prev_return[int(path_numbers[i].item()),0]
+            deltas[i] = rewards[i] + args.gamma * prev_value[int(path_numbers[i].item()),0]  - values.data[i]
+            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage 
+
+            prev_return[int(path_numbers[i].item()),0] = returns[i, 0]
+            prev_value[int(path_numbers[i].item()),0] = values.data[i, 0]
             prev_advantage = advantages[i, 0]
 
         targets = Variable(returns)
@@ -145,11 +159,11 @@ if __name__ == "__main__":
 
     for i_episode in count(1):
         memory = Memory()
+        memory_extra=Memory()
 
-        num_steps = 0
         reward_batch = 0
         num_episodes = 0
-        while num_steps < args.batch_size-1:
+        for i in range(args.batch_size):
             state = env.reset()[0]
             state = running_state(state)
 
@@ -159,26 +173,33 @@ if __name__ == "__main__":
                 action = action.data[0].numpy()
                 next_state, reward, done, _,_ = env.step(action)
                 reward_sum += reward
-
                 next_state = running_state(next_state)
+                path_number = i
 
-                mask = 1
-                if t==args.max_length-1:
-                    mask = 0
-
-                memory.push(state, np.array([action]), mask, next_state, reward)
-
+                memory.push(state, np.array([action]), path_number, next_state, reward)
                 if args.render:
                     env.render()
-
                 state = next_state
-            num_steps += (t+1)
+            
+            for t in range(args.max_length):
+                action = select_action(state)
+                action = action.data[0].numpy()
+                next_state, reward, done, _,_ = env.step(action)
+                next_state = running_state(next_state)
+                path_number = i
+
+                memory_extra.push(state, np.array([action]), path_number, next_state, reward)
+                if args.render:
+                    env.render()
+                state = next_state
+
             num_episodes += 1
             reward_batch += reward_sum
 
         reward_batch /= num_episodes
         batch = memory.sample()
-        update_params(batch)
+        batch_extra = memory_extra.sample()
+        update_params(batch,batch_extra,args.batch_size)
 
         if i_episode % args.log_interval == 0:
             print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(
