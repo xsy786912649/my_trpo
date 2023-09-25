@@ -188,7 +188,7 @@ if __name__ == "__main__":
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _,_ = env.step(action)
+                next_state, reward, done, _ = env.step(action)
                 next_state = running_state(next_state)
                 path_number = i
 
