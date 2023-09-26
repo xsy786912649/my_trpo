@@ -162,6 +162,7 @@ running_reward = ZFilter((1,), demean=False, clip=10)
 
 if __name__ == "__main__":
 
+    print("max_episode_steps: ", env._max_episode_steps)
     for i_episode in count(1):
         memory = Memory()
         memory_extra=Memory()
