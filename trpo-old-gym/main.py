@@ -43,8 +43,8 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='interval between training status logs (default: 10)')
-parser.add_argument('--max-length', type=int, default=1000, metavar='N',
-                    help='max length of a path (default: 1000)')
+parser.add_argument('--max-length', type=int, default=10000, metavar='N',
+                    help='max length of a path (default: 10000)')
 args = parser.parse_args()
 
 env = gym.make(args.env_name)
@@ -178,7 +178,6 @@ if __name__ == "__main__":
                 action = action.data[0].numpy()
                 next_state, reward, done, _ = env.step(action)
                 reward_sum += reward
-                next_state_original= deepcopy(next_state)
                 next_state = running_state(next_state)
                 path_number = i
 
@@ -189,9 +188,7 @@ if __name__ == "__main__":
                 if done:
                     break
             
-            env.reset()
-            env.state=env.unwrapped.state = next_state_original
-            state = running_state(next_state_original)
+            env._elapsed_steps=0
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
