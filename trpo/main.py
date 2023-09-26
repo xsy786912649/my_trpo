@@ -11,6 +11,7 @@ from running_state import ZFilter
 from torch.autograd import Variable
 from trpo import trpo_step
 from utils import *
+from copy import deepcopy
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True
@@ -171,8 +172,9 @@ if __name__ == "__main__":
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _,_ = env.step(action)
+                next_state, reward, done, truncated, info = env.step(action)
                 reward_sum += reward
+                next_state_original= deepcopy(next_state)
                 next_state = running_state(next_state)
                 path_number = i
 
@@ -180,11 +182,17 @@ if __name__ == "__main__":
                 if args.render:
                     env.render()
                 state = next_state
+                if done or truncated:
+                    break
             
+            env.reset()
+            env.state=env.unwrapped.state = next_state_original
+            state = running_state(next_state_original)
+
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _,_ = env.step(action)
+                next_state, reward, done, truncated, info = env.step(action)
                 next_state = running_state(next_state)
                 path_number = i
 
@@ -192,6 +200,8 @@ if __name__ == "__main__":
                 if args.render:
                     env.render()
                 state = next_state
+                if done or truncated:
+                    break
 
             num_episodes += 1
             reward_batch += reward_sum
