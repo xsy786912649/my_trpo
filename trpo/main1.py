@@ -1,7 +1,3 @@
-import os
-os.add_dll_directory("C://Users//lenovo//.mujoco//mjpro150//bin")
-#os.add_dll_directory("C://Users//78691//.mujoco//mjpro150//bin")
-
 import argparse
 from itertools import count
 
@@ -25,7 +21,7 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
 parser.add_argument('--gamma', type=float, default=0.995, metavar='G',
                     help='discount factor (default: 0.995)')
-parser.add_argument('--env-name', default="HalfCheetah-v2", metavar='G',
+parser.add_argument('--env-name', default="HalfCheetah-v4", metavar='G',
                     help='name of the environment to run')
 parser.add_argument('--tau', type=float, default=0.97, metavar='G',
                     help='gae (default: 0.97)')
@@ -43,10 +39,14 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='interval between training status logs (default: 10)')
-parser.add_argument('--max-length', type=int, default=10000, metavar='N',
+parser.add_argument('--max-length', type=int, default=1000, metavar='N',
                     help='max length of a path (default: 10000)')
 args = parser.parse_args()
 
+#if args.env_name=="HalfCheetah-v4":
+#    env = gym.make(args.env_name,exclude_current_positions_from_observation=False)
+#else:
+#    env = gym.make(args.env_name)
 env = gym.make(args.env_name)
 
 num_inputs = env.observation_space.shape[0]
@@ -81,12 +81,9 @@ def update_params(batch,batch_extra,batch_size):
         deltas = torch.Tensor(actions.size(0),1)
         advantages = torch.Tensor(actions.size(0),1)
 
-        prev_values = value_net(Variable(states_extra))
-        prev_value0=torch.zeros(batch_size,1)
         prev_return=torch.zeros(batch_size,1)
         prev_value=torch.zeros(batch_size,1)
-        prev_delta=torch.zeros(batch_size,1)
-        prev_advantage=torch.zeros(batch_size,1)
+        prev_advantage = 0
 
         k=batch_size-1
         for i in reversed(range(rewards_extra.size(0))):
@@ -95,18 +92,15 @@ def update_params(batch,batch_extra,batch_size):
                 k=k-1
                 assert k==path_numbers_extra[i].item()
             prev_return[k,0]=rewards[i]+ args.gamma * prev_return[k,0] 
-            prev_delta[k,0]=rewards[i]+ args.gamma * prev_value0[k,0]  - prev_values.data[i]
-            prev_advantage[k,0]=prev_delta[k,0]+ args.gamma * args.tau * prev_advantage[k,0]
-            prev_value0[k,0]=prev_values.data[i]
         
         for i in reversed(range(rewards.size(0))):
             returns[i] = rewards[i] + args.gamma * prev_return[int(path_numbers[i].item()),0]
             deltas[i] = rewards[i] + args.gamma * prev_value[int(path_numbers[i].item()),0]  - values.data[i]
-            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage[int(path_numbers[i].item()),0]
+            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage 
 
             prev_return[int(path_numbers[i].item()),0] = returns[i, 0]
             prev_value[int(path_numbers[i].item()),0] = values.data[i, 0]
-            prev_advantage[int(path_numbers[i].item()),0] = advantages[i, 0]
+            prev_advantage = advantages[i, 0]
 
         targets = Variable(returns)
 
@@ -168,6 +162,7 @@ running_reward = ZFilter((1,), demean=False, clip=10)
 
 if __name__ == "__main__":
 
+    print("max_episode_steps: ", env._max_episode_steps)
     for i_episode in count(1):
         memory = Memory()
         memory_extra=Memory()
@@ -175,14 +170,14 @@ if __name__ == "__main__":
         reward_batch = 0
         num_episodes = 0
         for i in range(args.batch_size):
-            state = env.reset()
+            state = env.reset()[0]
             state = running_state(state)
 
             reward_sum = 0
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, done, truncated, info = env.step(action)
                 reward_sum += reward
                 next_state = running_state(next_state)
                 path_number = i
@@ -191,14 +186,14 @@ if __name__ == "__main__":
                 if args.render:
                     env.render()
                 state = next_state
-                if done:
+                if done or truncated:
                     break
             
             env._elapsed_steps=0
             for t in range(args.max_length):
                 action = select_action(state)
                 action = action.data[0].numpy()
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, done, truncated, info = env.step(action)
                 next_state = running_state(next_state)
                 path_number = i
 
@@ -206,7 +201,7 @@ if __name__ == "__main__":
                 if args.render:
                     env.render()
                 state = next_state
-                if done:
+                if done or truncated:
                     break
 
             num_episodes += 1

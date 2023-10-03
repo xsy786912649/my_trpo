@@ -39,7 +39,7 @@ parser.add_argument('--render', action='store_true',
                     help='render the environment')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='interval between training status logs (default: 10)')
-parser.add_argument('--max-length', type=int, default=10000, metavar='N',
+parser.add_argument('--max-length', type=int, default=1000, metavar='N',
                     help='max length of a path (default: 10000)')
 args = parser.parse_args()
 
@@ -81,9 +81,12 @@ def update_params(batch,batch_extra,batch_size):
         deltas = torch.Tensor(actions.size(0),1)
         advantages = torch.Tensor(actions.size(0),1)
 
+        prev_values = value_net(Variable(states_extra))
+        prev_value0=torch.zeros(batch_size,1)
         prev_return=torch.zeros(batch_size,1)
         prev_value=torch.zeros(batch_size,1)
-        prev_advantage = 0
+        prev_delta=torch.zeros(batch_size,1)
+        prev_advantage=torch.zeros(batch_size,1)
 
         k=batch_size-1
         for i in reversed(range(rewards_extra.size(0))):
@@ -92,15 +95,18 @@ def update_params(batch,batch_extra,batch_size):
                 k=k-1
                 assert k==path_numbers_extra[i].item()
             prev_return[k,0]=rewards[i]+ args.gamma * prev_return[k,0] 
+            prev_delta[k,0]=rewards[i]+ args.gamma * prev_value0[k,0]  - prev_values.data[i]
+            prev_advantage[k,0]=prev_delta[k,0]+ args.gamma * args.tau * prev_advantage[k,0]
+            prev_value0[k,0]=prev_values.data[i]
         
         for i in reversed(range(rewards.size(0))):
             returns[i] = rewards[i] + args.gamma * prev_return[int(path_numbers[i].item()),0]
             deltas[i] = rewards[i] + args.gamma * prev_value[int(path_numbers[i].item()),0]  - values.data[i]
-            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage 
+            advantages[i] = deltas[i] + args.gamma * args.tau * prev_advantage[int(path_numbers[i].item()),0]
 
             prev_return[int(path_numbers[i].item()),0] = returns[i, 0]
             prev_value[int(path_numbers[i].item()),0] = values.data[i, 0]
-            prev_advantage = advantages[i, 0]
+            prev_advantage[int(path_numbers[i].item()),0] = advantages[i, 0]
 
         targets = Variable(returns)
 
